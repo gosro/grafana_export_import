@@ -10,17 +10,17 @@ import uuid
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Grafana settings
-GRAFANA_URL = 'http://localhost:3000'
-GRAFANA_API_KEY = 'eyJrIjoid1F5cmIzZTFuNEV1M2RWcjQzdjU2TTVWcng4c0FKVEEiLCJuIjoidGVzdCIsImlkIjoxfQ=='
+GRAFANA_URL = 'http://url:3000'
+GRAFANA_API_KEY = 'api_key'
 
 # MinIO settings
-MINIO_URL = 'http://192.168.178.44:9000'
-MINIO_ACCESS_KEY = 'z87jm0qT4Xr4uJ6UrJd9'
-MINIO_SECRET_KEY = 'rrJEtjIWGpxhVy6Mq2YVXR4994y8ykwrqR6ExNp2'
-MINIO_BUCKET = 'dashbords'
+MINIO_URL = 'http://url:9000'
+MINIO_ACCESS_KEY = 'access_key'
+MINIO_SECRET_KEY = 'secret_key'
+MINIO_BUCKET = 'bucket_name'
 
 # Backup directory
-BACKUP_DIR = 'grafana_dashboards'
+BACKUP_DIR = 'dir_name_to_create'
 
 # Initialize MinIO client
 try:
