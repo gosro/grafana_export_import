@@ -77,7 +77,9 @@ if response:
 
                             # Save the dashboard data to a JSON file
                             try:
-                                with open(f'{dashboard["title"]}.json', 'w') as f:
+                                
+                                safe_filename = dashboard["title"].replace("/", "-")
+                                with open(f'{safe_filename}.json', 'w') as f:
                                     json.dump(dashboard_data['dashboard'], f)
                             except Exception as e:
                                 logging.error(f'Failed to save dashboard JSON: {e}')
@@ -85,8 +87,9 @@ if response:
 
                             # Upload the dashboard JSON file to MinIO
                             try:
-                                with open(f'{dashboard["title"]}.json', 'rb') as data:
-                                    s3.Bucket(MINIO_BUCKET).put_object(Key=os.path.join(BACKUP_DIR, folder["title"], f'{dashboard["title"]}.json'), Body=data)
+                                safe_filename = dashboard["title"].replace("/", "-")
+                                with open(f'{safe_filename}.json', 'rb') as data:
+                                    s3.Bucket(MINIO_BUCKET).put_object(Key=os.path.join(BACKUP_DIR, folder["title"].replace("/", "-"), f'{dashboard["title"].replace("/", "-")}.json'), Body=data)
                             except Exception as e:
                                 logging.error(f'Failed to upload dashboard JSON to MinIO: {e}')
                                 continue
