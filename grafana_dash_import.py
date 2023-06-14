@@ -50,6 +50,14 @@ headers = {
     'Content-Type': 'application/json'
 }
 
+# Function to fetch datasource name from UID
+def get_datasource_name(datasource_uid):
+    response = requests.get(f'{GRAFANA_URL}/api/datasources/uid/{datasource_uid}', headers=headers)
+    if response.status_code == 200:
+        return response.json().get('name')
+    else:
+        return None
+
 success = True
 
 # For each file (dashboard), download it, read the JSON, and import to Grafana
@@ -71,6 +79,17 @@ for file in files:
     except Exception as e:
         logging.error(f'Failed to read JSON file: {e}')
         continue
+
+    # Replace datasource UID with name in panels
+    for panel in dashboard_json.get('panels', []):
+        if 'datasource' in panel and panel['datasource'] != None:
+            panel['datasource'] = get_datasource_name(panel['datasource'])
+
+    # Replace datasource UID with name in rows
+    for row in dashboard_json.get('rows', []):
+        for panel in row.get('panels', []):
+            if 'datasource' in panel and panel['datasource'] != None:
+                panel['datasource'] = get_datasource_name(panel['datasource'])
 
     # Generate a new uid and nullify id for the dashboard
     dashboard_json['uid'] = str(uuid.uuid4())
