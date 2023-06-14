@@ -5,6 +5,7 @@ import requests
 import json
 import logging
 import uuid
+import re
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -55,6 +56,11 @@ success = True
 for file in files:
     folder_name, filename = file.key.split('/')[-2:]
     
+    # Prepare safe folder UID
+    safe_folder_uid = re.sub('[^a-z0-9_-]', '-', folder_name.lower())
+    if safe_folder_uid[0].isdigit():
+        safe_folder_uid = 'f-' + safe_folder_uid
+
     # Download file
     s3.Bucket(MINIO_BUCKET).download_file(file.key, filename)
 
@@ -71,11 +77,11 @@ for file in files:
     dashboard_json['id'] = None
 
     # Create folder in Grafana if it doesn't exist
-    folder_url = f'{GRAFANA_URL}/api/folders/{folder_name}'
+    folder_url = f'{GRAFANA_URL}/api/folders/{safe_folder_uid}'
     folder_response = requests.get(folder_url, headers=headers)
     if folder_response.status_code == 404:
         create_folder_data = {
-            'uid': folder_name,
+            'uid': safe_folder_uid,
             'title': folder_name
         }
         create_folder_response = requests.post(f'{GRAFANA_URL}/api/folders', headers=headers, json=create_folder_data)
@@ -97,6 +103,7 @@ for file in files:
     if response.status_code != 200:
         logging.error(f'Failed to import dashboard: {response.content}')
         continue
+
 if success:
     logging.info('Dashboard import script finished successfully.')
 else:
