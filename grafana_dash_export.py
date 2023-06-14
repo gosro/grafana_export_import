@@ -18,8 +18,9 @@ MINIO_ACCESS_KEY = 'access_key'
 MINIO_SECRET_KEY = 'secret_key'
 MINIO_BUCKET = 'bucket_name'
 
-# Backup directory
-BACKUP_DIR = 'dir_name_to_create'
+# Backup directories
+DASHBOARDS_BACKUP_DIR = 'dashboards_dir_name_to_create'
+DATASOURCES_BACKUP_DIR = 'datasources_dir_name_to_create'
 
 # Initialize MinIO client
 try:
@@ -57,6 +58,31 @@ headers = {
 
 backup_successful = True
 
+# Get datasources from Grafana
+response = handle_request(f'{GRAFANA_URL}/api/datasources')
+
+if response:
+    datasources = response.json()
+    
+    for datasource in datasources:
+        # Save the datasource config to a JSON file
+        try:
+            safe_filename = datasource["name"].replace("/", "-")
+            with open(f'{safe_filename}.json', 'w') as f:
+                json.dump(datasource, f)
+        except Exception as e:
+            logging.error(f'Failed to save datasource JSON: {e}')
+            continue
+
+        # Upload the datasource JSON file to MinIO
+        try:
+            with open(f'{safe_filename}.json', 'rb') as data:
+                s3.Bucket(MINIO_BUCKET).put_object(Key=os.path.join(DATASOURCES_BACKUP_DIR, f'{safe_filename}.json'), Body=data)
+        except Exception as e:
+            logging.error(f'Failed to upload datasource JSON to MinIO: {e}')
+            continue
+
+# Get Folders and Dashboards
 response = handle_request(f'{GRAFANA_URL}/api/search')
 
 if response:
@@ -89,7 +115,7 @@ if response:
                             try:
                                 safe_filename = dashboard["title"].replace("/", "-")
                                 with open(f'{safe_filename}.json', 'rb') as data:
-                                    s3.Bucket(MINIO_BUCKET).put_object(Key=os.path.join(BACKUP_DIR, folder["title"].replace("/", "-"), f'{dashboard["title"].replace("/", "-")}.json'), Body=data)
+                                    s3.Bucket(MINIO_BUCKET).put_object(Key=os.path.join(DASHBOARDS_BACKUP_DIR, folder["title"].replace("/", "-"), f'{dashboard["title"].replace("/", "-")}.json'), Body=data)
                             except Exception as e:
                                 logging.error(f'Failed to upload dashboard JSON to MinIO: {e}')
                                 continue
