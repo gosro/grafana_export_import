@@ -51,21 +51,16 @@ def handle_request(url):
     except requests.exceptions.RequestException as err:
         logging.error(f'Oops: Something Else: {err}')
 
-# Get folders from Grafana
 headers = {
     'Authorization': f'Bearer {GRAFANA_API_KEY}',
 }
 
-backup_successful = True
-
-# Get datasources from Grafana
+# Export datasources from Grafana
 response = handle_request(f'{GRAFANA_URL}/api/datasources')
 
 if response:
-    datasources = response.json()
-    
-    for datasource in datasources:
-        # Save the datasource config to a JSON file
+    for datasource in response.json():
+        # Save the datasource data to a JSON file
         try:
             safe_filename = datasource["name"].replace("/", "-")
             with open(f'{safe_filename}.json', 'w') as f:
@@ -82,7 +77,7 @@ if response:
             logging.error(f'Failed to upload datasource JSON to MinIO: {e}')
             continue
 
-# Get Folders and Dashboards
+# Export dashboards from Grafana
 response = handle_request(f'{GRAFANA_URL}/api/search')
 
 if response:
@@ -100,26 +95,20 @@ if response:
                         dashboard_response = handle_request(f'{GRAFANA_URL}/api/dashboards/uid/{dashboard["uid"]}')
                         if dashboard_response:
                             dashboard_data = dashboard_response.json()
+                            safe_filename = dashboard_data['dashboard']['title'].replace("/", "-")
 
                             # Save the dashboard data to a JSON file
                             try:
-                                
-                                safe_filename = dashboard["title"].replace("/", "-")
                                 with open(f'{safe_filename}.json', 'w') as f:
-                                    json.dump(dashboard_data['dashboard'], f)
+                                    json.dump(dashboard_data, f)
                             except Exception as e:
                                 logging.error(f'Failed to save dashboard JSON: {e}')
                                 continue
-
-                            # Upload the dashboard JSON file to MinIO
+                           # Upload the dashboard JSON file to MinIO
                             try:
-                                safe_filename = dashboard["title"].replace("/", "-")
                                 with open(f'{safe_filename}.json', 'rb') as data:
-                                    s3.Bucket(MINIO_BUCKET).put_object(Key=os.path.join(DASHBOARDS_BACKUP_DIR, folder["title"].replace("/", "-"), f'{dashboard["title"].replace("/", "-")}.json'), Body=data)
+                                    s3.Bucket(MINIO_BUCKET).put_object(Key=os.path.join(DASHBOARDS_BACKUP_DIR, folder_data['title'], f'{safe_filename}.json'), Body=data)
                             except Exception as e:
                                 logging.error(f'Failed to upload dashboard JSON to MinIO: {e}')
                                 continue
-if backup_successful: 
-    logging.info('Backup script finished successfully.') 
-else: 
-    logging.error('Backup script finished with errors.')
+logging.info('Export script completed successfult.')

@@ -45,93 +45,51 @@ headers = {
     'Content-Type': 'application/json'
 }
 
-# --- PART 1: IMPORT DATASOURCES ---
-
-datasource_files = s3.Bucket(MINIO_BUCKET).objects.filter(Prefix=DATASOURCES_BACKUP_DIR)
-
-for file in datasource_files:
-    filename = file.key.split('/')[-1]
-    
-    # Download file
-    s3.Bucket(MINIO_BUCKET).download_file(file.key, filename)
-
-    # Read file
-    try:
+# Import datasources to Grafana
+try:
+    datasources = s3.Bucket(MINIO_BUCKET).objects.filter(Prefix=DATASOURCES_BACKUP_DIR)
+    for datasource in datasources:
+        filename = datasource.key.split('/')[-1]
+        s3.Bucket(MINIO_BUCKET).download_file(datasource.key, filename)
         with open(filename, 'r') as f:
             datasource_json = json.load(f)
-    except Exception as e:
-        logging.error(f'Failed to read JSON file: {e}')
-        continue
+        response = requests.post(f'{GRAFANA_URL}/api/datasources', headers=headers, json=datasource_json)
+        if response.status_code != 200:
+            logging.error(f'Failed to import datasource: {response.content}')
+            continue
+    logging.info('Datasources import completed.')
+except Exception as e:
+    logging.error(f'Failed to import datasources: {e}')
 
-    # Import data source to Grafana
-    response = requests.post(f'{GRAFANA_URL}/api/datasources', headers=headers, json=datasource_json)
-    
-    if response.status_code != 200:
-        logging.error(f'Failed to import data source: {response.content}')
-    else:
-        logging.info(f'Successfully imported data source: {filename}')
-
-# --- PART 2: IMPORT DASHBOARDS ---
-
-dashboard_files = s3.Bucket(MINIO_BUCKET).objects.filter(Prefix=DASHBOARDS_BACKUP_DIR)
-
-for file in dashboard_files:
-    folder_name, filename = file.key.split('/')[-2:]
-    
-    # Prepare safe folder UID
-    safe_folder_uid = re.sub('[^a-z0-9_-]', '-', folder_name.lower())
-    if safe_folder_uid[0].isdigit():
-        safe_folder_uid = 'f-' + safe_folder_uid
-
-    # Download file
-    s3.Bucket(MINIO_BUCKET).download_file(file.key, filename)
-
-    # Read file
-    try:
+# Import dashboards to Grafana
+try:
+    files = s3.Bucket(MINIO_BUCKET).objects.filter(Prefix=DASHBOARDS_BACKUP_DIR)
+    for file in files:
+        folder_name, filename = file.key.split('/')[-2:]
+        safe_folder_uid = re.sub('[^a-z0-9_-]', '-', folder_name.lower())
+        if safe_folder_uid[0].isdigit():
+            safe_folder_uid = 'f-' + safe_folder_uid
+        s3.Bucket(MINIO_BUCKET).download_file(file.key, filename)
         with open(filename, 'r') as f:
             dashboard_json = json.load(f)
-    except Exception as e:
-        logging.error(f'Failed to read JSON file: {e}')
-        continue
-
-    # Check if dashboard has a title
-    if 'title' not in dashboard_json or not dashboard_json['title']:
-        logging.error(f'Dashboard in file {filename} does not have a title. Skipping.')
-        continue
-
-    # Generate a new uid and nullify id for the dashboard
-    dashboard_json['uid'] = str(uuid.uuid4())
-    dashboard_json['id'] = None
-
-    # Create folder in Grafana if it doesn't exist
-    folder_url = f'{GRAFANA_URL}/api/folders/{safe_folder_uid}'
-    folder_response = requests.get(folder_url, headers=headers)
-    if folder_response.status_code == 200:
-        logging.info(f'Folder "{folder_name}" already exists. Skipping creation.')
-        folder_id = folder_response.json().get('id')
-    elif folder_response.status_code == 404:
-        create_folder_data = {
-            'uid': safe_folder_uid,
-            'title': folder_name
-        }
-        create_folder_response = requests.post(f'{GRAFANA_URL}/api/folders', headers=headers, json=create_folder_data)
-        if create_folder_response.status_code != 200:
-            logging.error(f'Failed to create folder: {create_folder_response.status_code} - {create_folder_response.content}')
+        dashboard_json['dashboard']['id'] = None
+        folder_url = f'{GRAFANA_URL}/api/folders/{safe_folder_uid}'
+        folder_response = requests.get(folder_url, headers=headers)
+        if folder_response.status_code == 404:
+            create_folder_data = {'uid': safe_folder_uid, 'title': folder_name}
+            create_folder_response = requests.post(f'{GRAFANA_URL}/api/folders', headers=headers, json=create_folder_data)
+            if create_folder_response.status_code != 200:
+                logging.error(f'Failed to create folder: {create_folder_response.content}')
+                continue
+            else:
+                folder_id = create_folder_response.json().get("id")
+        else:
+            folder_id = folder_response.json().get("id")
+        data = {'dashboard': dashboard_json['dashboard'], 'overwrite': True, 'folderId': folder_id}
+        response = requests.post(f'{GRAFANA_URL}/api/dashboards/db', headers=headers, json=data)
+        if response.status_code != 200:
+            logging.error(f'Failed to import dashboard: {response.content}')
             continue
-        folder_id = create_folder_response.json().get('id')
-    else:
-        logging.error(f'Error checking folder existence: {folder_response.content}')
-        continue
-# Import dashboard to Grafana
-    data = {
-        'dashboard': dashboard_json,
-        'overwrite': True,
-        'folderId': folder_id
-    }
-    response = requests.post(f'{GRAFANA_URL}/api/dashboards/db', headers=headers, json=data)
-    
-    if response.status_code != 200:
-        logging.error(f'Failed to import dashboard: {response.content}')
-
-logging.info('Import script finished.')
-
+    logging.info('Dashboards import completed.')
+except Exception as e:
+    logging.error(f'Failed to import dashboards: {e}')
